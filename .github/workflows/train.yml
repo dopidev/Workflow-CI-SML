@@ -14,7 +14,7 @@ jobs:
     steps:
       # ========== STEP 1: SET UP JOB ==========
       - name: Set up job
-        run: echo "🚀 Starting MLflow Training Job with Conda"
+        run: echo "🚀 Starting MLflow Training Job"
       
       # ========== STEP 2: CHECKOUT ==========
       - name: Run actions/checkout@v4
@@ -26,47 +26,50 @@ jobs:
         with:
           auto-update-conda: true
           python-version: 3.12.7
-          activate-environment: mlflow-env
+          activate-environment: ml-training-env
       
       # ========== STEP 4: CHECK ENVIRONMENT ==========
       - name: Check Env
         run: |
-          echo "✅ Python version: $(python --version)"
-          echo "✅ Conda version: $(conda --version)"
+          echo "✅ Python: $(python --version)"
+          echo "✅ Conda: $(conda --version)"
           echo "✅ Current directory: $(pwd)"
-          echo "✅ MLProject folder:"
           ls -la MLProject/
       
-      # ========== STEP 5: INSTALL DEPENDENCIES ==========
-      - name: Install dependencies
-        run: |
-          # Install MLflow globally for running the project
-          pip install mlflow==2.19.0
-      
-      # ========== STEP 6: RUN MLFLOW PROJECT (WITH CONDA) ==========
-      - name: Run mlflow project
+      # ========== STEP 5: CREATE CONDA ENV FROM CONDA.YAML ==========
+      - name: Create conda environment
         shell: bash -l {0}
         run: |
           cd MLProject
-          # Use --env-manager=conda (new way, replaces --no-conda)
-          mlflow run . --env-manager=conda
+          conda env create -f conda.yaml -n ml-training-env 2>/dev/null || conda env update -n ml-training-env -f conda.yaml
+          echo "✅ Conda environment 'ml-training-env' created"
+      
+      # ========== STEP 6: RUN TRAINING (DIRECT PYTHON, NO MLFLOW RUN) ==========
+      - name: Run training
+        shell: bash -l {0}
+        run: |
+          cd MLProject
+          conda run -n ml-training-env python modelling.py --test_size 0.2 --random_state 42
       
       # ========== STEP 7: GET LATEST MLFLOW RUN_ID ==========
       - name: Get latest MLflow run_id
-        shell: bash -l {0}
         run: |
           cd MLProject
-          RUN_ID=$(python -c "import mlflow; print(mlflow.last_active_run().info.run_id)" 2>/dev/null || echo "unknown")
-          echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV
-          echo "✅ Latest run_id: $RUN_ID"
+          if [ -f "run_id.txt" ]; then
+            RUN_ID=$(cat run_id.txt)
+            echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV
+            echo "✅ Run ID: $RUN_ID"
+          else
+            echo "⚠️ run_id.txt not found"
+          fi
       
       # ========== STEP 8: INSTALL PYTHON DEPENDENCIES ==========
       - name: Install Python dependencies
         run: |
           pip install google-auth google-auth-oauthlib google-api-python-client
       
-      # ========== STEP 9: UPLOAD TO GOOGLE DRIVE ==========
-      - name: Upload to Google Drive (via artifact)
+      # ========== STEP 9: UPLOAD TO GOOGLE DRIVE (via artifact) ==========
+      - name: Upload to Google Drive
         run: |
           cd MLProject
           zip -r mlflow-models.zip mlruns/
@@ -85,8 +88,7 @@ jobs:
               -n "customer-shopping-model:latest" \
               --enable-mlserver
           else
-            echo "⚠️ Model not found, searching..."
-            find mlruns -type d -name "random_forest_model"
+            echo "⚠️ Model not found"
             exit 1
           fi
       
