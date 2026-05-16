@@ -45,11 +45,11 @@ jobs:
       
       # ========== STEP 6: RUN MLFLOW PROJECT (WITH CONDA) ==========
       - name: Run mlflow project
-        shell: bash -l {0}  # Important: Use login shell for conda
+        shell: bash -l {0}
         run: |
           cd MLProject
-          # MLflow will automatically use conda.yaml
-          mlflow run . --no-conda=false
+          # Use --env-manager=conda (new way, replaces --no-conda)
+          mlflow run . --env-manager=conda
       
       # ========== STEP 7: GET LATEST MLFLOW RUN_ID ==========
       - name: Get latest MLflow run_id
