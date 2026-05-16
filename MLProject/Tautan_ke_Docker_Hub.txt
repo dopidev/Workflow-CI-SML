@@ -1,0 +1,20 @@
+DOCKER HUB REPOSITORY LINK
+==============================================
+
+Repository URL: https://hub.docker.com/r/idlofizahir86/customer-shopping-model
+
+( Ganti idlofizahir86 dengan username Docker Hub Anda )
+
+How to pull the image:
+docker pull idlofizahir86/customer-shopping-model:latest
+
+How to run the container:
+docker run -p 8080:8080 idlofizahir86/customer-shopping-model:latest
+
+Tags available:
+- :latest          (most recent build)
+- :{run_number}    (GitHub Actions run number)
+- :run-{run_id}    (GitHub Actions run ID)
+
+This Docker image was built automatically by GitHub Actions CI/CD pipeline.
+The image contains the trained ML model ready for inference via MLserver.
