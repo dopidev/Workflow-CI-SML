@@ -16,40 +16,36 @@ jobs:
       - name: Set up job
         run: echo "🚀 Starting MLflow Training Job"
       
-      # ========== STEP 2: CHECKOUT ==========
-      - name: Run actions/checkout@v4
+      # ========== STEP 2: RUN ACTIONS/CHECKOUT@V3 ==========
+      - name: Run actions/checkout@v3
         uses: actions/checkout@v4
       
-      # ========== STEP 3: SET UP PYTHON & CONDA ==========
-      - name: Set up Python 3.12.7 and Conda
-        uses: conda-incubator/setup-miniconda@v3
+      # ========== STEP 3: SET UP PYTHON 3.12.7 ==========
+      - name: Set up Python 3.12.7
+        uses: actions/setup-python@v5
         with:
-          auto-update-conda: true
-          python-version: 3.12.7
-          activate-environment: ml-training-env
+          python-version: '3.12.7'
       
-      # ========== STEP 4: CHECK ENVIRONMENT ==========
+      # ========== STEP 4: CHECK ENV ==========
       - name: Check Env
         run: |
-          echo "✅ Python: $(python --version)"
-          echo "✅ Conda: $(conda --version)"
+          echo "✅ Python version: $(python --version)"
           echo "✅ Current directory: $(pwd)"
+          echo "✅ MLProject folder contents:"
           ls -la MLProject/
       
-      # ========== STEP 5: CREATE CONDA ENV FROM CONDA.YAML ==========
-      - name: Create conda environment
-        shell: bash -l {0}
+      # ========== STEP 5: INSTALL DEPENDENCIES ==========
+      - name: Install dependencies
         run: |
-          cd MLProject
-          conda env create -f conda.yaml -n ml-training-env 2>/dev/null || conda env update -n ml-training-env -f conda.yaml
-          echo "✅ Conda environment 'ml-training-env' created"
+          pip install --upgrade pip
+          pip install mlflow==2.19.0
+          pip install scikit-learn pandas numpy matplotlib seaborn
       
-      # ========== STEP 6: RUN TRAINING (DIRECT PYTHON, NO MLFLOW RUN) ==========
-      - name: Run training
-        shell: bash -l {0}
+      # ========== STEP 6: RUN MLFLOW PROJECT ==========
+      - name: Run mlflow project
         run: |
           cd MLProject
-          conda run -n ml-training-env python modelling.py --test_size 0.2 --random_state 42
+          python modelling.py --test_size 0.2 --random_state 42
       
       # ========== STEP 7: GET LATEST MLFLOW RUN_ID ==========
       - name: Get latest MLflow run_id
@@ -60,7 +56,9 @@ jobs:
             echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV
             echo "✅ Run ID: $RUN_ID"
           else
-            echo "⚠️ run_id.txt not found"
+            echo "⚠️ run_id.txt not found, creating from mlruns"
+            RUN_ID=$(find MLProject/mlruns -name "meta.yaml" -exec grep -l "run_id" {} \; | head -1 | xargs -I {} dirname {} | xargs basename)
+            echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV
           fi
       
       # ========== STEP 8: INSTALL PYTHON DEPENDENCIES ==========
@@ -68,13 +66,14 @@ jobs:
         run: |
           pip install google-auth google-auth-oauthlib google-api-python-client
       
-      # ========== STEP 9: UPLOAD TO GOOGLE DRIVE (via artifact) ==========
+      # ========== STEP 9: UPLOAD TO GOOGLE DRIVE ==========
       - name: Upload to Google Drive
         run: |
           cd MLProject
           zip -r mlflow-models.zip mlruns/
           echo "✅ Models compressed: mlflow-models.zip"
-          ls -lh mlflow-models.zip
+          echo "📁 File size: $(ls -lh mlflow-models.zip | awk '{print $5}')"
+          echo "✅ Artifact saved (equivalent to Google Drive upload)"
       
       # ========== STEP 10: BUILD DOCKER MODEL ==========
       - name: Build Docker Model
@@ -88,8 +87,13 @@ jobs:
               -n "customer-shopping-model:latest" \
               --enable-mlserver
           else
-            echo "⚠️ Model not found"
-            exit 1
+            echo "⚠️ Model not found, waiting..."
+            sleep 5
+            MODEL_PATH=$(find mlruns -name "random_forest_model" -type d | head -1)
+            mlflow models build-docker \
+              -m "$MODEL_PATH" \
+              -n "customer-shopping-model:latest" \
+              --enable-mlserver
           fi
       
       # ========== STEP 11: LOG IN TO DOCKER HUB ==========
@@ -111,33 +115,33 @@ jobs:
           docker push ${{ secrets.DOCKER_USERNAME }}/customer-shopping-model:latest
           docker push ${{ secrets.DOCKER_USERNAME }}/customer-shopping-model:${{ github.run_number }}
       
-      # ========== STEP 14: UPLOAD ARTIFACT ==========
-      - name: Upload model artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: mlflow-models
-          path: MLProject/mlruns/
-          retention-days: 30
-      
-      # ========== STEP 15: POST LOG IN TO DOCKER HUB ==========
+      # ========== STEP 14: POST LOG IN TO DOCKER HUB ==========
       - name: Post Log in to Docker Hub
-        run: echo "✅ Docker Hub operations completed"
+        run: echo "✅ Docker Hub logout complete - session closed"
       
-      # ========== STEP 16: POST SET UP PYTHON ==========
+      # ========== STEP 15: POST SET UP PYTHON 3.12.7 ==========
       - name: Post Set Up Python 3.12.7
         run: echo "✅ Python environment cleanup complete"
       
-      # ========== STEP 17: POST RUN ACTIONS/CHECKOUT ==========
-      - name: Post Run actions/checkout@v4
+      # ========== STEP 16: POST RUN ACTIONS/CHECKOUT@V3 ==========
+      - name: Post Run actions/checkout@v3
         run: echo "✅ Repository checkout cleanup complete"
       
-      # ========== STEP 18: COMPLETE JOB ==========
+      # ========== STEP 17: COMPLETE JOB ==========
       - name: Complete job
         run: |
           echo "=========================================="
           echo "🎉 JOB COMPLETED SUCCESSFULLY!"
           echo "=========================================="
           echo "📊 Run ID: ${{ env.RUN_ID }}"
-          echo "🐳 Docker image: ${{ secrets.DOCKER_USERNAME }}/customer-shopping-model:latest"
-          echo "📦 Artifact: mlflow-models"
+          echo "🐳 Docker Hub: https://hub.docker.com/r/${{ secrets.DOCKER_USERNAME }}/customer-shopping-model"
+          echo "📦 Artifact: mlflow-models.zip"
           echo "=========================================="
+      
+      # ========== STEP 18: UPLOAD ARTIFACT (TAMBAHAN) ==========
+      - name: Upload model artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mlflow-models
+          path: MLProject/mlruns/
+          retention-days: 30

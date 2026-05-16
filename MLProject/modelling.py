@@ -1,6 +1,5 @@
 """
 modelling.py - Training model untuk CI/CD
-MLflow tracking dengan file-based (no conflict)
 """
 
 import pandas as pd
@@ -34,7 +33,6 @@ print(f"✅ Tracking URI: file:./mlruns")
 print(f"✅ MLflow version: {mlflow.__version__}")
 
 # ========== LOAD DATA ==========
-print("\n📊 Loading dataset...")
 df = pd.read_csv('customer_shopping_data_preprocessing.csv')
 print(f"✅ Dataset loaded: {df.shape}")
 
@@ -51,19 +49,14 @@ print(f"✅ Train: {len(X_train)} samples")
 print(f"✅ Test: {len(X_test)} samples")
 
 # ========== TRAINING ==========
-print("\n🚀 Starting training...")
 model = RandomForestRegressor(n_estimators=100, random_state=args.random_state)
 
-# Start run - pastikan tidak ada run aktif
-with mlflow.start_run(run_name="CI_CD_Training", nested=False) as run:
-    print(f"✅ Run started with ID: {run.info.run_id}")
-    
+with mlflow.start_run(run_name="CI_CD_Training") as run:
     # Log parameters
     mlflow.log_params({
         "test_size": args.test_size,
         "random_state": args.random_state,
-        "n_estimators": 100,
-        "model_type": "RandomForestRegressor"
+        "n_estimators": 100
     })
     
     # Train
