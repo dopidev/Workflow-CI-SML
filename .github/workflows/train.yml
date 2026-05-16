@@ -82,13 +82,12 @@ jobs:
           MODEL_PATH=$(find mlruns -name "random_forest_model" -type d | head -1)
           if [ -n "$MODEL_PATH" ]; then
             echo "✅ Model found at: $MODEL_PATH"
-            
-            # Copy model ke lokasi yang diketahui
-            mkdir -p model_artifacts
-            cp -r "$MODEL_PATH" model_artifacts/
-            
-            # Build Docker image with custom Dockerfile
-            docker build -t customer-shopping-model:latest -f Dockerfile .
+            # Use mlflow build-docker with local env manager (no Python version conflict)
+            mlflow models build-docker \
+              -m "$MODEL_PATH" \
+              -n "customer-shopping-model:latest" \
+              --enable-mlserver \
+              --env-manager local
           else
             echo "⚠️ Model not found"
             exit 1
