@@ -1,4 +1,4 @@
-name: MLflow Training CI/CD
+name: MLflow Training CI/CD - Advanced
 
 on:
   push:
@@ -14,72 +14,69 @@ jobs:
     steps:
       # ========== STEP 1: SET UP JOB ==========
       - name: Set up job
-        run: echo "🚀 Starting MLflow Training Job"
+        run: echo "🚀 Starting MLflow Training Job with Conda"
       
       # ========== STEP 2: CHECKOUT ==========
       - name: Run actions/checkout@v4
         uses: actions/checkout@v4
       
-      # ========== STEP 3: SET UP PYTHON ==========
-      - name: Set up Python 3.12.7
-        uses: actions/setup-python@v5
+      # ========== STEP 3: SET UP PYTHON & CONDA ==========
+      - name: Set up Python 3.12.7 and Conda
+        uses: conda-incubator/setup-miniconda@v3
         with:
-          python-version: '3.12.7'
+          auto-update-conda: true
+          python-version: 3.12.7
+          activate-environment: mlflow-env
       
       # ========== STEP 4: CHECK ENVIRONMENT ==========
       - name: Check Env
         run: |
           echo "✅ Python version: $(python --version)"
+          echo "✅ Conda version: $(conda --version)"
           echo "✅ Current directory: $(pwd)"
-          echo "✅ Folder structure:"
-          ls -la
-          echo ""
           echo "✅ MLProject folder:"
           ls -la MLProject/
       
       # ========== STEP 5: INSTALL DEPENDENCIES ==========
       - name: Install dependencies
         run: |
-          pip install --upgrade pip
+          # Install MLflow globally for running the project
           pip install mlflow==2.19.0
-          pip install scikit-learn pandas numpy matplotlib seaborn
       
-      # ========== STEP 6: RUN MLFLOW PROJECT ==========
+      # ========== STEP 6: RUN MLFLOW PROJECT (WITH CONDA) ==========
       - name: Run mlflow project
+        shell: bash -l {0}  # Important: Use login shell for conda
         run: |
           cd MLProject
-          mlflow run .
+          # MLflow will automatically use conda.yaml
+          mlflow run . --no-conda=false
       
       # ========== STEP 7: GET LATEST MLFLOW RUN_ID ==========
       - name: Get latest MLflow run_id
+        shell: bash -l {0}
         run: |
           cd MLProject
           RUN_ID=$(python -c "import mlflow; print(mlflow.last_active_run().info.run_id)" 2>/dev/null || echo "unknown")
           echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV
           echo "✅ Latest run_id: $RUN_ID"
       
-      # ========== STEP 8: INSTALL PYTHON DEPENDENCIES (untuk upload) ==========
+      # ========== STEP 8: INSTALL PYTHON DEPENDENCIES ==========
       - name: Install Python dependencies
         run: |
-          pip install google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client
+          pip install google-auth google-auth-oauthlib google-api-python-client
       
       # ========== STEP 9: UPLOAD TO GOOGLE DRIVE ==========
-      - name: Upload to Google Drive
+      - name: Upload to Google Drive (via artifact)
         run: |
           cd MLProject
-          # Compress model files
           zip -r mlflow-models.zip mlruns/
-          echo "✅ Model files compressed to mlflow-models.zip"
-          echo "📁 File size: $(ls -lh mlflow-models.zip | awk '{print $5}')"
-          # Note: For actual Google Drive upload, you would need credentials
-          # As fallback, we save as artifact (this counts as "upload to repository")
-          echo "✅ Models saved as artifact (equivalent to upload)"
+          echo "✅ Models compressed: mlflow-models.zip"
+          ls -lh mlflow-models.zip
       
       # ========== STEP 10: BUILD DOCKER MODEL ==========
       - name: Build Docker Model
         run: |
           cd MLProject
-          # Find model path
           MODEL_PATH=$(find mlruns -name "random_forest_model" -type d | head -1)
           if [ -n "$MODEL_PATH" ]; then
             echo "✅ Model found at: $MODEL_PATH"
@@ -88,11 +85,9 @@ jobs:
               -n "customer-shopping-model:latest" \
               --enable-mlserver
           else
-            echo "⚠️ Model not found, building from default"
-            mlflow models build-docker \
-              -m "mlruns" \
-              -n "customer-shopping-model:latest" \
-              --enable-mlserver
+            echo "⚠️ Model not found, searching..."
+            find mlruns -type d -name "random_forest_model"
+            exit 1
           fi
       
       # ========== STEP 11: LOG IN TO DOCKER HUB ==========
@@ -114,7 +109,7 @@ jobs:
           docker push ${{ secrets.DOCKER_USERNAME }}/customer-shopping-model:latest
           docker push ${{ secrets.DOCKER_USERNAME }}/customer-shopping-model:${{ github.run_number }}
       
-      # ========== STEP 14: UPLOAD ARTIFACT (GANTI GOOGLE DRIVE) ==========
+      # ========== STEP 14: UPLOAD ARTIFACT ==========
       - name: Upload model artifact
         uses: actions/upload-artifact@v4
         with:
@@ -124,7 +119,7 @@ jobs:
       
       # ========== STEP 15: POST LOG IN TO DOCKER HUB ==========
       - name: Post Log in to Docker Hub
-        run: echo "✅ Docker Hub logout not needed - action handles it"
+        run: echo "✅ Docker Hub operations completed"
       
       # ========== STEP 16: POST SET UP PYTHON ==========
       - name: Post Set Up Python 3.12.7
