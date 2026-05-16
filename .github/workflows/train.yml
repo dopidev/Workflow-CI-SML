@@ -82,18 +82,16 @@ jobs:
           MODEL_PATH=$(find mlruns -name "random_forest_model" -type d | head -1)
           if [ -n "$MODEL_PATH" ]; then
             echo "✅ Model found at: $MODEL_PATH"
-            mlflow models build-docker \
-              -m "$MODEL_PATH" \
-              -n "customer-shopping-model:latest" \
-              --enable-mlserver
+            
+            # Copy model ke lokasi yang diketahui
+            mkdir -p model_artifacts
+            cp -r "$MODEL_PATH" model_artifacts/
+            
+            # Build Docker image with custom Dockerfile
+            docker build -t customer-shopping-model:latest -f Dockerfile .
           else
-            echo "⚠️ Model not found, waiting..."
-            sleep 5
-            MODEL_PATH=$(find mlruns -name "random_forest_model" -type d | head -1)
-            mlflow models build-docker \
-              -m "$MODEL_PATH" \
-              -n "customer-shopping-model:latest" \
-              --enable-mlserver
+            echo "⚠️ Model not found"
+            exit 1
           fi
       
       # ========== STEP 11: LOG IN TO DOCKER HUB ==========
