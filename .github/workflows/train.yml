@@ -6,46 +6,62 @@ on:
     paths:
       - 'MLProject/**'
   workflow_dispatch:
+    inputs:
+      n_estimators:
+        description: 'Number of trees'
+        required: false
+        default: '100'
+      max_depth:
+        description: 'Max depth (0 for None)'
+        required: false
+        default: '10'
 
 jobs:
   training:
     runs-on: ubuntu-latest
     
     steps:
-      # ========== STEP 1: SET UP JOB ==========
       - name: Set up job
         run: echo "🚀 Starting MLflow Training Job"
       
-      # ========== STEP 2: RUN ACTIONS/CHECKOUT@V3 ==========
       - name: Run actions/checkout@v3
         uses: actions/checkout@v4
       
-      # ========== STEP 3: SET UP PYTHON 3.12.7 ==========
-      - name: Set up Python 3.12.7
-        uses: actions/setup-python@v5
+      - name: Set up Python 3.12.7 and Conda
+        uses: conda-incubator/setup-miniconda@v3
         with:
-          python-version: '3.12.7'
+          auto-update-conda: true
+          python-version: 3.12.7
       
-      # ========== STEP 4: CHECK ENV ==========
       - name: Check Env
         run: |
           echo "✅ Python version: $(python --version)"
-          echo "✅ Current directory: $(pwd)"
+          echo "✅ Conda version: $(conda --version)"
           echo "✅ MLProject folder contents:"
           ls -la MLProject/
       
-      # ========== STEP 5: INSTALL DEPENDENCIES ==========
       - name: Install dependencies
         run: |
-          pip install --upgrade pip
           pip install mlflow==2.19.0
-          pip install scikit-learn pandas numpy matplotlib seaborn
       
-      # ========== STEP 6: RUN MLFLOW PROJECT ==========
+      # ========== STEP 6: RUN MLFLOW PROJECT (MENGGUNAKAN mlflow run) ==========
       - name: Run mlflow project
+        shell: bash -l {0}
         run: |
           cd MLProject
-          python modelling.py --test_size 0.2 --random_state 42
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            mlflow run . --env-manager=conda \
+              -P test_size=0.2 \
+              -P random_state=42 \
+              -P n_estimators=${{ github.event.inputs.n_estimators }} \
+              -P max_depth=${{ github.event.inputs.max_depth }}
+          else
+            mlflow run . --env-manager=conda \
+              -P test_size=0.2 \
+              -P random_state=42 \
+              -P n_estimators=100 \
+              -P max_depth=10
+          fi
       
       # ========== STEP 7: GET LATEST MLFLOW RUN_ID ==========
       - name: Get latest MLflow run_id
@@ -56,9 +72,7 @@ jobs:
             echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV
             echo "✅ Run ID: $RUN_ID"
           else
-            echo "⚠️ run_id.txt not found, creating from mlruns"
-            RUN_ID=$(find MLProject/mlruns -name "meta.yaml" -exec grep -l "run_id" {} \; | head -1 | xargs -I {} dirname {} | xargs basename)
-            echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV
+            echo "⚠️ run_id.txt not found"
           fi
       
       # ========== STEP 8: INSTALL PYTHON DEPENDENCIES ==========
@@ -72,8 +86,6 @@ jobs:
           cd MLProject
           zip -r mlflow-models.zip mlruns/
           echo "✅ Models compressed: mlflow-models.zip"
-          echo "📁 File size: $(ls -lh mlflow-models.zip | awk '{print $5}')"
-          echo "✅ Artifact saved (equivalent to Google Drive upload)"
       
       # ========== STEP 10: BUILD DOCKER MODEL ==========
       - name: Build Docker Model
@@ -82,7 +94,6 @@ jobs:
           MODEL_PATH=$(find mlruns -name "random_forest_model" -type d | head -1)
           if [ -n "$MODEL_PATH" ]; then
             echo "✅ Model found at: $MODEL_PATH"
-            # Use mlflow build-docker with local env manager (no Python version conflict)
             mlflow models build-docker \
               -m "$MODEL_PATH" \
               -n "customer-shopping-model:latest" \
@@ -114,7 +125,7 @@ jobs:
       
       # ========== STEP 14: POST LOG IN TO DOCKER HUB ==========
       - name: Post Log in to Docker Hub
-        run: echo "✅ Docker Hub logout complete - session closed"
+        run: echo "✅ Docker Hub operations completed"
       
       # ========== STEP 15: POST SET UP PYTHON 3.12.7 ==========
       - name: Post Set Up Python 3.12.7
@@ -132,10 +143,9 @@ jobs:
           echo "=========================================="
           echo "📊 Run ID: ${{ env.RUN_ID }}"
           echo "🐳 Docker Hub: https://hub.docker.com/r/${{ secrets.DOCKER_USERNAME }}/customer-shopping-model"
-          echo "📦 Artifact: mlflow-models.zip"
           echo "=========================================="
       
-      # ========== STEP 18: UPLOAD ARTIFACT (TAMBAHAN) ==========
+      # ========== STEP 18: UPLOAD ARTIFACT ==========
       - name: Upload model artifact
         uses: actions/upload-artifact@v4
         with:
