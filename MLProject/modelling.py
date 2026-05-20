@@ -1,5 +1,6 @@
 """
 modelling.py - MLflow Project untuk Kriteria 3
+TIDAK menggunakan mlflow.start_run() karena MLflow Project sudah membuat run otomatis
 """
 
 import pandas as pd
@@ -26,11 +27,9 @@ args = parser.parse_args()
 
 print(f"📌 Parameters: test_size={args.test_size}, random_state={args.random_state}, n_estimators={args.n_estimators}, max_depth={args.max_depth}")
 
-# ========== SETUP MLFLOW TRACKING (FILE-BASED) ==========
+# ========== SETUP MLFLOW TRACKING ==========
 os.makedirs("mlruns", exist_ok=True)
 mlflow.set_tracking_uri("file:./mlruns")
-
-# Set experiment - will create if not exists
 mlflow.set_experiment("CI_CD_Experiment")
 
 print(f"✅ Tracking URI: file:./mlruns")
@@ -51,37 +50,38 @@ X_train, X_test, y_train, y_test = train_test_split(
 
 print(f"✅ Train: {len(X_train)} samples, Test: {len(X_test)} samples")
 
-# ========== TRAINING WITH AUTOLOG ONLY ==========
+# ========== TRAINING ==========
 model = RandomForestRegressor(
     n_estimators=args.n_estimators,
     max_depth=args.max_depth if args.max_depth != 0 else None,
     random_state=args.random_state
 )
 
-# Use nested=True to allow run inside existing run
-with mlflow.start_run(run_name="CI_CD_Training", nested=True) as run:
-    print(f"✅ Run started with ID: {run.info.run_id}")
-    
-    # ONLY autolog - NO manual logging
-    mlflow.sklearn.autolog()
-    
-    model.fit(X_train, y_train)
-    
-    y_pred = model.predict(X_test)
-    
-    # Manual calculation for display only (not logged to MLflow)
-    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-    mae = mean_absolute_error(y_test, y_pred)
-    r2 = r2_score(y_test, y_pred)
-    
-    print(f"\n📊 RESULTS:")
-    print(f"   RMSE: {rmse:.4f}")
-    print(f"   MAE: {mae:.4f}")
-    print(f"   R²: {r2:.4f}")
-    
-    # Save run_id to file (for later steps)
+# Enable autolog, menggunakan run yang sudah dibuat oleh MLflow Project
+mlflow.sklearn.autolog()
+
+# Train model (autolog will log everything to the existing run)
+model.fit(X_train, y_train)
+
+# Predict
+y_pred = model.predict(X_test)
+
+# Calculate metrics (for display only)
+rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+mae = mean_absolute_error(y_test, y_pred)
+r2 = r2_score(y_test, y_pred)
+
+print(f"\n📊 RESULTS:")
+print(f"   RMSE: {rmse:.4f}")
+print(f"   MAE: {mae:.4f}")
+print(f"   R²: {r2:.4f}")
+
+# Get current run ID from autolog (if needed for later steps)
+current_run = mlflow.last_active_run()
+if current_run:
+    run_id = current_run.info.run_id
     with open("run_id.txt", "w") as f:
-        f.write(run.info.run_id)
-    print(f"✅ Run ID saved: {run.info.run_id}")
+        f.write(run_id)
+    print(f"✅ Run ID saved: {run_id}")
 
 print("\n✅ MODELLING COMPLETE!")
