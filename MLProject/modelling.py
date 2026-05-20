@@ -29,16 +29,12 @@ print(f"📌 Parameters: test_size={args.test_size}, random_state={args.random_s
 # ========== SETUP MLFLOW TRACKING (FILE-BASED) ==========
 os.makedirs("mlruns", exist_ok=True)
 mlflow.set_tracking_uri("file:./mlruns")
+
+# Set experiment - will create if not exists
 mlflow.set_experiment("CI_CD_Experiment")
 
 print(f"✅ Tracking URI: file:./mlruns")
-
-# ========== END ACTIVE RUN IF EXISTS ==========
-if mlflow.active_run():
-    print(f"⚠️ Found active run: {mlflow.active_run().info.run_id}")
-    print("🏁 Ending active run...")
-    mlflow.end_run()
-    print("✅ Active run ended")
+print(f"✅ Experiment: CI_CD_Experiment")
 
 # ========== LOAD DATA ==========
 df = pd.read_csv('customer_shopping_data_preprocessing.csv')
@@ -62,8 +58,8 @@ model = RandomForestRegressor(
     random_state=args.random_state
 )
 
-# Start new run (pastikan tidak konflik)
-with mlflow.start_run(run_name="CI_CD_Training", nested=False) as run:
+# Use nested=True to allow run inside existing run
+with mlflow.start_run(run_name="CI_CD_Training", nested=True) as run:
     print(f"✅ Run started with ID: {run.info.run_id}")
     
     # ONLY autolog - NO manual logging
