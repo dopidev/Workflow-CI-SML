@@ -44,7 +44,7 @@ jobs:
         run: |
           pip install mlflow==2.19.0
       
-      # ========== STEP 6: RUN MLFLOW PROJECT (MENGGUNAKAN mlflow run) ==========
+      # ========== STEP 6: RUN MLFLOW PROJECT ==========
       - name: Run mlflow project
         shell: bash -l {0}
         run: |

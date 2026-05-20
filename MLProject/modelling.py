@@ -33,6 +33,13 @@ mlflow.set_experiment("CI_CD_Experiment")
 
 print(f"✅ Tracking URI: file:./mlruns")
 
+# ========== END ACTIVE RUN IF EXISTS ==========
+if mlflow.active_run():
+    print(f"⚠️ Found active run: {mlflow.active_run().info.run_id}")
+    print("🏁 Ending active run...")
+    mlflow.end_run()
+    print("✅ Active run ended")
+
 # ========== LOAD DATA ==========
 df = pd.read_csv('customer_shopping_data_preprocessing.csv')
 print(f"✅ Dataset loaded: {df.shape}")
@@ -55,7 +62,10 @@ model = RandomForestRegressor(
     random_state=args.random_state
 )
 
-with mlflow.start_run(run_name="CI_CD_Training"):
+# Start new run (pastikan tidak konflik)
+with mlflow.start_run(run_name="CI_CD_Training", nested=False) as run:
+    print(f"✅ Run started with ID: {run.info.run_id}")
+    
     # ONLY autolog - NO manual logging
     mlflow.sklearn.autolog()
     
@@ -72,5 +82,10 @@ with mlflow.start_run(run_name="CI_CD_Training"):
     print(f"   RMSE: {rmse:.4f}")
     print(f"   MAE: {mae:.4f}")
     print(f"   R²: {r2:.4f}")
+    
+    # Save run_id to file (for later steps)
+    with open("run_id.txt", "w") as f:
+        f.write(run.info.run_id)
+    print(f"✅ Run ID saved: {run.info.run_id}")
 
 print("\n✅ MODELLING COMPLETE!")
