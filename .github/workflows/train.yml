@@ -87,43 +87,21 @@ jobs:
           zip -r mlflow-models.zip mlruns/
           echo "✅ Models compressed: mlflow-models.zip"
       
-       # ========== STEP 10: BUILD DOCKER MODEL ==========
+      # ========== STEP 10: BUILD DOCKER MODEL ==========
       - name: Build Docker Model
         run: |
           cd MLProject
-          echo "🔍 DEBUG: Listing all model paths..."
-          find mlruns -name "model.pkl" -type f
-          echo ""
-          echo "🔍 DEBUG: Listing all MLmodel files..."
-          find mlruns -name "MLmodel" -type f
-          echo ""
-          echo "🔍 DEBUG: Full mlruns structure..."
-          ls -la mlruns/
-          find mlruns -type d
-          echo ""
           
-          # Try different possible model paths
-          MODEL_PATH=""
+          # First, try to find model in mlruns
+          MODEL_PATH=$(find mlruns -name "random_forest_model" -type d | head -1)
           
-          # Try to find random_forest_model
-          if [ -d "mlruns/*/*/artifacts/random_forest_model" ]; then
-            MODEL_PATH=$(find mlruns -name "random_forest_model" -type d | head -1)
+          # If not found, use the direct pickle file
+          if [ -z "$MODEL_PATH" ] || [ ! -d "$MODEL_PATH" ]; then
+            echo "⚠️ Model not found in mlruns, using model_artifacts/model.pkl"
+            MODEL_PATH="model_artifacts/model.pkl"
           fi
           
-          # If not found, try to find model directory directly
-          if [ -z "$MODEL_PATH" ]; then
-            MODEL_PATH=$(find mlruns -name "model" -type d | head -1)
-          fi
-          
-          # If still not found, get the run directory and use default model path
-          if [ -z "$MODEL_PATH" ]; then
-            RUN_DIR=$(find mlruns -name "run_id.txt" -type f 2>/dev/null | head -1 | xargs dirname)
-            if [ -n "$RUN_DIR" ]; then
-              MODEL_PATH="$RUN_DIR/artifacts/random_forest_model"
-            fi
-          fi
-          
-          if [ -n "$MODEL_PATH" ] && [ -d "$MODEL_PATH" ]; then
+          if [ -n "$MODEL_PATH" ] && [ -e "$MODEL_PATH" ]; then
             echo "✅ Model found at: $MODEL_PATH"
             mlflow models build-docker \
               -m "$MODEL_PATH" \
@@ -131,8 +109,10 @@ jobs:
               --enable-mlserver \
               --env-manager local
           else
-            echo "❌ Model not found in any expected location"
-            echo "🔍 Full mlruns structure:"
+            echo "❌ Model not found in any location"
+            echo "🔍 Contents of model_artifacts:"
+            ls -la model_artifacts/
+            echo "🔍 mlruns structure:"
             find mlruns -type d
             exit 1
           fi
